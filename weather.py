@@ -197,7 +197,7 @@ def main():
     img_name = "%s-%s.png" % (day, MODE)
     os.makedirs("img", exist_ok=True)
     img_path = os.path.join("img", img_name)
-    img_url = "https://cdn.jsdelivr.net/gh/%s@main/img/%s" % (REPO, img_name)
+    img_url = "https://testingcf.jsdelivr.net/gh/%s@main/img/%s" % (REPO, img_name)
     title = "今晚12点天气预报" if is_mid else "两地实时天气"
     desp = build_desp(data, is_mid, now, img_url)
 

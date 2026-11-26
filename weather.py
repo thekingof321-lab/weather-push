@@ -91,5 +91,4 @@ def main():
     with urllib.request.urlopen(req, timeout=30) as r:
         print(r.read().decode())
 
-if __name__ == "__&#8203;main__":
-    main()
+main()

@@ -8,7 +8,15 @@ MODE = sys.argv[1] if len(sys.argv) > 1 else "realtime"
 ACTION = sys.argv[2] if len(sys.argv) > 2 else "send"
 DRY = os.environ.get("DRY_RUN", "") == "1"
 REPO = "thekingof321-lab/weather-push"
-CITIES = [("中山", "113.463889,22.529167"), ("廉江", "110.318174,21.606512")]
+CITIES = [("中山", "113.4689,22.5277"), ("廉江", "110.3219,21.6039")]
+
+def uv_cat(v):
+    v = float(v)
+    if v < 3: return "弱"
+    if v < 5: return "中等"
+    if v < 7: return "强"
+    if v < 10: return "很强"
+    return "极强"
 
 def fetch(path, loc):
     url = "https://" + HOST + path + "?location=" + loc
@@ -36,17 +44,20 @@ def collect():
     for name, loc in CITIES:
         if is_mid:
             d = fetch("/v7/weather/24h", loc)
+            d7 = fetch("/v7/weather/7d", loc)
             hr = next((x for x in d["hourly"] if x["fxTime"] == target), None)
             if hr is None:
                 res.append({"name": name, "missing": True, "link": d.get("fxLink", "")})
                 continue
             t, rh = float(hr["temp"]), float(hr["humidity"])
+            dly = d7["daily"][1] if len(d7["daily"]) > 1 else {}
             res.append({
                 "name": name, "temp": hr["temp"],
                 "feel": f(feels_like(t, rh, float(hr["windSpeed"])), 1),
                 "rh": hr["humidity"], "dew": hr["dew"], "pop": hr["pop"],
                 "wind": hr["windSpeed"], "winddir": hr["windDir"] + hr["windScale"] + "\u7ea7",
                 "text": hr["text"], "pressure": hr["pressure"],
+                "uv": dly.get("uvIndex") or 0, "cloud": hr.get("cloud") or 0,
                 "lo": None, "hi": None, "sunrise": None, "sunset": None,
                 "link": d.get("fxLink", ""),
             })
@@ -66,6 +77,7 @@ def collect():
                 "rh": n["humidity"], "dew": cur["dew"], "pop": max(pops) if pops else 0,
                 "wind": n["windSpeed"], "winddir": n["windDir"] + n["windScale"] + "\u7ea7",
                 "text": n["text"], "pressure": n["pressure"],
+                "uv": day.get("uvIndex") or 0, "cloud": n.get("cloud") or 0,
                 "lo": day["tempMin"], "hi": day["tempMax"],
                 "sunrise": day["sunrise"][-5:], "sunset": day["sunset"][-5:],
                 "link": d.get("fxLink", ""),
@@ -78,8 +90,11 @@ def chart_rows(a, b):
         ("体感", float(a["feel"]), a["feel"] + "℃", float(b["feel"]), b["feel"] + "℃", 35.0, 0),
         ("湿度", float(a["rh"]), f(a["rh"]) + "%", float(b["rh"]), f(b["rh"]) + "%", 100.0, 0),
         ("露点", float(a["dew"]), a["dew"] + "℃", float(b["dew"]), b["dew"] + "℃", 35.0, 10),
-        ("降水概率", float(a["pop"]), f(a["pop"]) + "%", float(b["pop"]), f(b["pop"]) + "%", 30.0, 0),
+        ("降水概率", float(a["pop"]), f(a["pop"]) + "%", float(b["pop"]), f(b["pop"]) + "%", 100.0, 0),
         ("风速", float(a["wind"]), f(a["wind"]) + "km/h", float(b["wind"]), f(b["wind"]) + "km/h", 40.0, 0),
+        ("紫外线", float(a["uv"]), f(a["uv"]) + "·" + uv_cat(a["uv"]), float(b["uv"]), f(b["uv"]) + "·" + uv_cat(b["uv"]), 12.0, 0),
+        ("气压", float(a["pressure"]) - 980.0, a["pressure"] + "hPa", float(b["pressure"]) - 980.0, b["pressure"] + "hPa", 60.0, 0),
+        ("云量", float(a["cloud"]), f(a["cloud"]) + "%", float(b["cloud"]), f(b["cloud"]) + "%", 100.0, 0),
     ]
 
 def font_path():
@@ -104,7 +119,7 @@ def draw_image(rows, a, b, is_mid, now, out):
     if not os.path.exists(fp):
         print("(找不到中文字体，跳过画图)")
         return False
-    W, H = 1120, 660
+    W, H = 1120, 840
     img = Image.new("RGB", (W, H), (255, 255, 255))
     d = ImageDraw.Draw(img)
     C_TITLE = (17, 24, 39); C_NUM = (31, 41, 55); C_METRIC = (55, 65, 81)
@@ -161,10 +176,10 @@ def draw_image(rows, a, b, is_mid, now, out):
     for x, city, cond, s2, s3 in (
         (40, a["name"], a["text"], l2, l3),
         (600, b["name"], b["text"], l2b, l3b)):
-        rrect(x, 462, x + 480, 645, 12, C_CARD)
-        txt(x + 28, 496, "%s · %s" % (city, cond), 27, C_CARDT, anchor="lm", bold=True)
-        txt(x + 28, 546, s2, 29, C_CARDS, anchor="lm")
-        txt(x + 28, 596, s3, 29, C_CARDS, anchor="lm")
+        rrect(x, 642, x + 480, 824, 12, C_CARD)
+        txt(x + 28, 674, "%s · %s" % (city, cond), 27, C_CARDT, anchor="lm", bold=True)
+        txt(x + 28, 726, s2, 29, C_CARDS, anchor="lm")
+        txt(x + 28, 778, s3, 29, C_CARDS, anchor="lm")
 
     img.save(out)
     return True
@@ -180,11 +195,11 @@ def build_desp(data, is_mid, now, img_url):
         lines.append("气温 %s℃｜体感 %s℃｜湿度 %s%%｜露点 %s℃" % (
             c["temp"], c["feel"], c["rh"], c["dew"]))
         if not is_mid:
-            lines.append("%s｜今日 %s~%s℃｜降水概率 %s%%｜风 %skm/h %s" % (
-                c["text"], c["lo"], c["hi"], c["pop"], c["wind"], c["winddir"]))
+            lines.append("%s｜今日 %s~%s℃｜降水概率 %s%%｜风 %skm/h %s｜气压 %shPa｜云量 %s%%｜UV %s" % (
+                c["text"], c["lo"], c["hi"], c["pop"], c["wind"], c["winddir"], c["pressure"], c["cloud"], c["uv"]))
         else:
-            lines.append("%s｜降水概率 %s%%｜气压 %shPa｜风 %s" % (
-                c["text"], c["pop"], c["pressure"], c["winddir"]))
+            lines.append("%s｜降水概率 %s%%｜气压 %shPa｜云量 %s%%｜风 %s" % (
+                c["text"], c["pop"], c["pressure"], c["cloud"], c["winddir"]))
         lines.append("")
     lines.append("[查看" + data[0]["name"] + "详细天气 >>](" + data[0]["link"] + ")")
     lines.append("")

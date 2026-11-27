@@ -48,6 +48,7 @@ jobs:
           git add img
           git commit -m "weather image" || echo "nothing to commit"
           git push
+          echo "IMG_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
       - name: Send to ServerChan
         env:
           SENDKEY: ${{ secrets.SENDKEY }}

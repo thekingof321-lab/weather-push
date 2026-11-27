@@ -8,6 +8,7 @@ MODE = sys.argv[1] if len(sys.argv) > 1 else "realtime"
 ACTION = sys.argv[2] if len(sys.argv) > 2 else "send"
 DRY = os.environ.get("DRY_RUN", "") == "1"
 REPO = "thekingof321-lab/weather-push"
+IMG_SHA = os.environ.get("IMG_SHA", "main")
 CITIES = [("中山", "113.4689,22.5277"), ("廉江", "110.3219,21.6039")]
 
 def uv_cat(v):
@@ -212,7 +213,7 @@ def main():
     img_name = "%s-%s.png" % (day, MODE)
     os.makedirs("img", exist_ok=True)
     img_path = os.path.join("img", img_name)
-    img_url = "https://testingcf.jsdelivr.net/gh/%s@main/img/%s" % (REPO, img_name)
+    img_url = "https://testingcf.jsdelivr.net/gh/%s@%s/img/%s" % (REPO, IMG_SHA, img_name)
     title = "今晚12点天气预报" if is_mid else "两地实时天气"
     desp = build_desp(data, is_mid, now, img_url)
 

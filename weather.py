@@ -19,8 +19,16 @@ def uv_cat(v):
     if v < 10: return "很强"
     return "极强"
 
+def uv_official(loc, day_offset=0):
+    try:
+        d = fetch("/v7/indices/1d?type=5" if day_offset == 0 else "/v7/indices/3d?type=5", loc)
+        return d["daily"][day_offset].get("category") or None
+    except Exception:
+        return None
+
 def fetch(path, loc):
-    url = "https://" + HOST + path + "?location=" + loc
+    sep = "&" if "?" in path else "?"
+    url = "https://" + HOST + path + sep + "location=" + loc
     req = urllib.request.Request(url, headers={"X-QW-Api-Key": QWKEY, "Accept-Encoding": "gzip"})
     with urllib.request.urlopen(req, timeout=30) as r:
         raw = r.read()
@@ -59,6 +67,7 @@ def collect():
                 "wind": hr["windSpeed"], "winddir": hr["windDir"] + hr["windScale"] + "\u7ea7",
                 "text": hr["text"], "pressure": hr["pressure"],
                 "uv": dly.get("uvIndex") or 0, "cloud": hr.get("cloud") or 0,
+                "vis": hr.get("vis") or 0,
                 "lo": None, "hi": None, "sunrise": None, "sunset": None,
                 "link": d.get("fxLink", ""),
             })
@@ -79,6 +88,8 @@ def collect():
                 "wind": n["windSpeed"], "winddir": n["windDir"] + n["windScale"] + "\u7ea7",
                 "text": n["text"], "pressure": n["pressure"],
                 "uv": day.get("uvIndex") or 0, "cloud": n.get("cloud") or 0,
+                "vis": n.get("vis") or 0,
+                "uvc": uv_official(loc) or uv_cat(day.get("uvIndex") or 0),
                 "lo": day["tempMin"], "hi": day["tempMax"],
                 "sunrise": day["sunrise"][-5:], "sunset": day["sunset"][-5:],
                 "link": d.get("fxLink", ""),
@@ -93,9 +104,10 @@ def chart_rows(a, b):
         ("露点", float(a["dew"]), a["dew"] + "℃", float(b["dew"]), b["dew"] + "℃", 35.0, 10),
         ("降水概率", float(a["pop"]), f(a["pop"]) + "%", float(b["pop"]), f(b["pop"]) + "%", 100.0, 0),
         ("风速", float(a["wind"]), f(a["wind"]) + "km/h", float(b["wind"]), f(b["wind"]) + "km/h", 40.0, 0),
-        ("紫外线", float(a["uv"]), f(a["uv"]) + "·" + uv_cat(a["uv"]), float(b["uv"]), f(b["uv"]) + "·" + uv_cat(b["uv"]), 12.0, 0),
+        ("紫外线", float(a["uv"]), f(a["uv"]) + "·" + (a.get("uvc") or uv_cat(a["uv"])), float(b["uv"]), f(b["uv"]) + "·" + (b.get("uvc") or uv_cat(b["uv"])), 12.0, 0),
         ("气压", float(a["pressure"]) - 980.0, a["pressure"] + "hPa", float(b["pressure"]) - 980.0, b["pressure"] + "hPa", 60.0, 0),
         ("云量", float(a["cloud"]), f(a["cloud"]) + "%", float(b["cloud"]), f(b["cloud"]) + "%", 100.0, 0),
+        ("能见度", float(a["vis"]), f(a["vis"]) + "km", float(b["vis"]), f(b["vis"]) + "km", 30.0, 0),
     ]
 
 def font_path():
@@ -120,7 +132,7 @@ def draw_image(rows, a, b, is_mid, now, out):
     if not os.path.exists(fp):
         print("(找不到中文字体，跳过画图)")
         return False
-    W, H = 1120, 840
+    W, H = 1120, 900
     img = Image.new("RGB", (W, H), (255, 255, 255))
     d = ImageDraw.Draw(img)
     C_TITLE = (17, 24, 39); C_NUM = (31, 41, 55); C_METRIC = (55, 65, 81)
@@ -177,10 +189,10 @@ def draw_image(rows, a, b, is_mid, now, out):
     for x, city, cond, s2, s3 in (
         (40, a["name"], a["text"], l2, l3),
         (600, b["name"], b["text"], l2b, l3b)):
-        rrect(x, 642, x + 480, 824, 12, C_CARD)
-        txt(x + 28, 674, "%s · %s" % (city, cond), 27, C_CARDT, anchor="lm", bold=True)
-        txt(x + 28, 726, s2, 29, C_CARDS, anchor="lm")
-        txt(x + 28, 778, s3, 29, C_CARDS, anchor="lm")
+        rrect(x, 700, x + 480, 882, 12, C_CARD)
+        txt(x + 28, 732, "%s · %s" % (city, cond), 27, C_CARDT, anchor="lm", bold=True)
+        txt(x + 28, 784, s2, 29, C_CARDS, anchor="lm")
+        txt(x + 28, 836, s3, 29, C_CARDS, anchor="lm")
 
     img.save(out)
     return True
@@ -196,11 +208,11 @@ def build_desp(data, is_mid, now, img_url):
         lines.append("气温 %s℃｜体感 %s℃｜湿度 %s%%｜露点 %s℃" % (
             c["temp"], c["feel"], c["rh"], c["dew"]))
         if not is_mid:
-            lines.append("%s｜今日 %s~%s℃｜降水概率 %s%%｜风 %skm/h %s｜气压 %shPa｜云量 %s%%｜UV %s" % (
-                c["text"], c["lo"], c["hi"], c["pop"], c["wind"], c["winddir"], c["pressure"], c["cloud"], c["uv"]))
+            lines.append("%s｜今日 %s~%s℃｜降水概率 %s%%｜风 %skm/h %s｜气压 %shPa｜云量 %s%%｜能见度 %skm｜紫外线 %s(%s)" % (
+                c["text"], c["lo"], c["hi"], c["pop"], c["wind"], c["winddir"], c["pressure"], c["cloud"], c["vis"], c["uv"], c.get("uvc", "")))
         else:
-            lines.append("%s｜降水概率 %s%%｜气压 %shPa｜云量 %s%%｜风 %s" % (
-                c["text"], c["pop"], c["pressure"], c["cloud"], c["winddir"]))
+            lines.append("%s｜降水概率 %s%%｜气压 %shPa｜云量 %s%%｜能见度 %skm｜风 %s" % (
+                c["text"], c["pop"], c["pressure"], c["cloud"], c["vis"], c["winddir"]))
         lines.append("")
     lines.append("[查看" + data[0]["name"] + "详细天气 >>](" + data[0]["link"] + ")")
     lines.append("")
